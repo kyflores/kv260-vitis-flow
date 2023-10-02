@@ -1,0 +1,99 @@
+# Install the relevant binfmt package first.
+# apt: qemu-user-static
+# dnf: qemu-user-binfmt
+# Based on https://github.com/Xilinx/kria-docker/blob/main/dockerfiles/kria-runtime
+
+FROM --platform=linux/arm64 ubuntu:22.04
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update ; \
+    apt-get install -y software-properties-common ; \
+    add-apt-repository -y ppa:xilinx-apps/ppa ; \
+    add-apt-repository -y ppa:ubuntu-xilinx/sdk ; \
+    add-apt-repository -y ppa:ubuntu-xilinx/gstreamer ; \
+    apt-get update ;
+
+# Install build dependencies for Vitis AI runtime and library
+RUN apt-get install --yes --no-install-recommends \
+    git \
+    build-essential \
+    cmake \
+    meson \
+    vim  \
+    protobuf-compiler \
+    libssl-dev \
+    libgtest-dev \
+    libjson-c-dev \
+    libgoogle-glog-dev \
+    libboost-filesystem-dev \
+    libprotobuf-dev \
+    libeigen3-dev \
+    libopencv-dev
+
+# Build Vitis AI deps and runtime
+RUN git clone --recursive https://github.com/Xilinx/Vitis-AI --branch v3.5 && \
+    pushd Vitis-AI/src/vai_runtime/ && \
+    pushd unilog/ && \
+        bash cmake.sh --clean --install-prefix=/usr && \
+    popd && pushd xir \
+        bash cmake.sh --clean --install-prefix=/usr && \
+    popd && pushd target_factory \
+        bash cmake.sh --clean --install-prefix=/usr && \
+    popd && pushd vart \
+        bash cmake.sh --clean --install-prefix=/usr --cmake-options="-DENABLE_SIM_RUNNER=OFF -DENABLE_CPU_RUNNER=OFF"
+    popd && \
+    popd
+
+# Build Vitis AI  library
+RUN pushd Vitis-AI/src/vai_library/ && \
+        bash cmake.sh --clean --install-prefix=/usr && \
+    popd
+
+# Continue adding the rest of the packages from the official kria-docker
+RUN apt-get install --yes --no-install-recommends \
+    v4l-utils \
+    alsa-base \
+    alsa-utils \
+    pulseaudio \
+    gstreamer1.0-tools \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-x \
+    gstreamer1.0-plugins-bad \
+    wget \
+    unzip \
+    python3-pip \
+    python3-dev \
+    gstreamer1.0-omx-generic \
+    libxilinx-vcu-omx1 \
+    xilinx-vcu-omx-utils \
+    gstreamer-xilinx1.0-omx-zynqmp \
+    libjansson4 \
+    net-tools \
+    gawk \
+    gstreamer1.0-alsa \
+    libdrm2 \
+    libdrm-common \
+    libdrm-tests \
+    libdrm-etnaviv1 \
+    libgstreamer1.0-0 \
+    libgstreamer-plugins-base1.0-0 \
+    libgstreamer-plugins-good1.0-0 \
+    libgstreamer-plugins-bad1.0-0 \
+    gstreamer1.0-plugins-base-apps \
+    gstreamer1.0-pulseaudio \
+    gstreamer1.0-opencv \
+    libv4l2rds0 \
+    libv4l-0 \
+    libv4lconvert0 \
+    libgstreamer-gl1.0-0 \
+    libgstreamer-opencv1.0-0 \
+    gcc \
+    libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-rtsp libgstrtspserver-1.0-0 \
+    gir1.2-gst-rtsp-server-1.0 \
+    gst-perf \
+    vvas-essentials
+
+RUN git clone --recurse-submodules https://github.com/Xilinx/VVAS.git --branch VVAS_REL_v3.0 && \
+    pushd VVAS
