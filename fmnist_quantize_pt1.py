@@ -51,7 +51,7 @@ def evaluate(model, val_loader, loss_fn):
                 if cls == lbl:
                     correct += 1
 
-    return torch.tensor(loss).mean()
+    return torch.tensor(losses).mean(), correct / total
 
 quantizer = torch_quantizer(
     'calib',
@@ -59,15 +59,17 @@ quantizer = torch_quantizer(
     dummy_input,
     device=device,
     quant_config_file=None)
+    # target=target)
 
 loss_fn = torch.nn.CrossEntropyLoss().to(device)
 quantizer.fast_finetune(
-    evaluate,
-    (quantizer.quant_model, val_loader, loss_fn)
+   evaluate,
+   (quantizer.quant_model, val_loader, loss_fn)
 )
+
 # It's necessary to evaluate the model after finetuning, this appears to
 # populate certain fields in the exported data.
 # https://github.com/Xilinx/Vitis-AI/issues/1168
-loss = evaluate(quantizer.quant_model, val_loader, loss_fn)
-print("Post quantization loss", loss)
+loss, correct = evaluate(quantizer.quant_model, val_loader, loss_fn)
+print("Post quantization loss: {}, correct: {}".format(loss, correct))
 quantizer.export_quant_config()
