@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <cmath>
 
 #include "vart/runner.hpp"
 #include "vart/runner_helper.hpp"
@@ -8,8 +9,45 @@
 #include <xir/tensor/tensor.hpp>
 #include <xir/util/data_type.hpp>
 
-int main() {
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+std::vector<uint8_t> tensor_from_stbimage(const std::string& filename) {
+    int x, y, n;
+    uint8_t* rawptr = stbi_load(filename.c_str(), &x, &y, &n, 0);
+    std::cout << "x, y, n: " << x << " " << y << " " << n << std::endl;
+    int pxs = x * y * n;
+    std::vector<uint8_t> vec(pxs);
+    memcpy(vec.data(), rawptr, pxs);
+    return vec;
+}
+
+float get_scale(const xir::Tensor* tensor) {
+    int fixpos = tensor->get_attr<int>("fix_point");
+    return std::exp2f(1.0f * (float)fixpos);
+}
+
+void print_softmax(int8_t* data, size_t len, float scale) {
+    double denom = 0;
+    std::vector<double> vec;
+    for (int i = 0; i < len; ++i) {
+        float tmp = static_cast<double>((data[i] / 128.0) * scale);
+        tmp = std::exp(tmp);
+        denom += tmp;
+        vec.push_back(tmp);
+    }
+
+    std::cout << std::endl;
+    for (int x = 0; x < len; ++x) {
+        std::cout << (vec[x] / denom) << " ";
+    }
+    std::cout << std::endl;
+}
+
+
+int main(int argc, char *argv[]) {
     static constexpr const char* MODELNAME = "quantize_result/deploy.xmodel";
+    auto image = tensor_from_stbimage(argv[1]);
 
     auto graph = xir::Graph::deserialize(MODELNAME);
 
@@ -28,7 +66,11 @@ int main() {
     }
     auto runner = vart::Runner::create_runner(subgraph, "run");
     auto input_tensors = runner->get_input_tensors();
+    float in_scale = get_scale(input_tensors[0]);
     auto output_tensors = runner->get_output_tensors();
+    float out_scale = get_scale(output_tensors[0]);
+    std::cout << "Input scale " << in_scale << std::endl;
+    std::cout << "Output scale " << out_scale << std::endl;
 
     std::cout << "Populating input tensor" << std::endl;
     int input_num = input_tensors.size();
@@ -43,8 +85,13 @@ int main() {
         // pointer into an integer, wtf? Need to undo that here to get something we can use as a ptr
         int8_t* raw_ptr_int = reinterpret_cast<int8_t*>(std::get<0>(tensor_data));
         size_t raw_bytes = std::get<1>(tensor_data);
+        std::cout << "Input tensor is " << raw_bytes << " bytes long" << std::endl;
         for (int x = 0; x < raw_bytes; ++x) {
-            raw_ptr_int[x] = (x % 256) - 128;
+            // In our training code, the uint8 images are squished to the range (0, 1)
+            // before being input to the network, so replicate that here.
+            float tmp = static_cast<float>(image[x]) / 256;
+
+            raw_ptr_int[x] = static_cast<int8_t>(tmp * in_scale);
         }
 
         input_tensor_buffers.emplace_back(std::move(t));
@@ -91,10 +138,8 @@ int main() {
     auto out_data = out_buf->data();
     int8_t* raw_ptr_int = reinterpret_cast<int8_t*>(std::get<0>(out_data));
     size_t raw_bytes = std::get<1>(out_data);
-    for (int x = 0; x < raw_bytes; ++x) {
-        std::cout << static_cast<int64_t>(raw_ptr_int[x]) << " ";
-    }
-    std::cout << std::endl;
+    std::cout << "Output tensor is " << raw_bytes << " bytes long" << std::endl;
+    print_softmax(raw_ptr_int, raw_bytes, out_scale);
 
     return 0;
 }

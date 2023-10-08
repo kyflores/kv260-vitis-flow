@@ -11,7 +11,7 @@ pkg_search_module(opencv REQUIRED IMPORTED_TARGET opencv4)
 
 add_executable(kv260-ai main.cc)
 target_include_directories(kv260-ai PRIVATE
-
+    "./"
 )
 target_link_libraries(kv260-ai
     PkgConfig::gstreamer
