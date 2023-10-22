@@ -31,7 +31,7 @@ void print_softmax(int8_t* data, size_t len, float scale) {
     double denom = 0;
     std::vector<double> vec;
     for (int i = 0; i < len; ++i) {
-        float tmp = static_cast<double>((data[i] / 128.0) * scale);
+        float tmp = static_cast<double>(data[i] / scale);
         tmp = std::exp(tmp);
         denom += tmp;
         vec.push_back(tmp);
@@ -117,13 +117,9 @@ int main(int argc, char *argv[]) {
     // us to call get(). The example actually calls get() when populating the input_tensor_buffers
     // vec, but that looks wrong b/c the unique_ptr it called get() on goes out of scope in the loop
     std::vector<vart::TensorBuffer*> input_ptrs;
-    for (auto& ptr : input_tensor_buffers) {
-        input_ptrs.push_back(ptr.get());
-    }
+    for (auto& ptr : input_tensor_buffers) { input_ptrs.push_back(ptr.get()); }
     std::vector<vart::TensorBuffer*> output_ptrs;
-    for (auto& ptr : output_tensor_buffers) {
-        output_ptrs.push_back(ptr.get());
-    }
+    for (auto& ptr : output_tensor_buffers) { output_ptrs.push_back(ptr.get()); }
 
     auto v = runner->execute_async(input_ptrs, output_ptrs);
     auto status = runner->wait((int)v.first, 1000000000);
